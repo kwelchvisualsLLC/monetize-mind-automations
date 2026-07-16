@@ -8,6 +8,9 @@ import {
   BizLead,
   Client,
   INDUSTRIES,
+  IdeaLog,
+  LeadBatch,
+  LoggedProspect,
   Prospect,
   STEP_TYPES,
   Step,
@@ -330,6 +333,7 @@ function DiffBadge({ d }: { d: string }) {
 // ── Main app ──────────────────────────────────
 export default function Page() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [ideaLog, setIdeaLog] = useState<IdeaLog>({ batches: [], prospects: [] });
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>({ screen: "home" });
   const [error, setError] = useState("");
@@ -341,6 +345,12 @@ export default function Page() {
       if (raw) {
         const d = JSON.parse(raw);
         if (Array.isArray(d?.clients)) setClients(d.clients);
+        if (d?.ideaLog?.batches || d?.ideaLog?.prospects) {
+          setIdeaLog({
+            batches: Array.isArray(d.ideaLog.batches) ? d.ideaLog.batches : [],
+            prospects: Array.isArray(d.ideaLog.prospects) ? d.ideaLog.prospects : [],
+          });
+        }
       }
     } catch {
       setError("Saved data could not be read — starting fresh (nothing was deleted).");
@@ -350,11 +360,11 @@ export default function Page() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ clients }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ clients, ideaLog }));
     } catch {
       setError("Couldn't save — browser storage may be full.");
     }
-  }, [clients, loaded]);
+  }, [clients, ideaLog, loaded]);
 
   const updateClient = (id: string, fn: (c: Client) => Client) =>
     setClients((cs) => cs.map((c) => (c.id === id ? fn(c) : c)));
@@ -415,6 +425,8 @@ export default function Page() {
         {view.screen === "home" && (
           <HomeScreen
             clients={clients}
+            ideaLog={ideaLog}
+            updateLog={setIdeaLog}
             onAdd={(c) => {
               setClients((cs) => [c, ...cs]);
               setView({ screen: "client", clientId: c.id });
@@ -482,9 +494,13 @@ const FINDER_INDUSTRIES = ["Surprise Me", ...INDUSTRIES.filter((i) => i !== "Oth
 function ClientFinder({
   clients,
   onAdd,
+  ideaLog,
+  updateLog,
 }: {
   clients: Client[];
   onAdd: (c: Client) => void;
+  ideaLog: IdeaLog;
+  updateLog: React.Dispatch<React.SetStateAction<IdeaLog>>;
 }) {
   const [industry, setIndustry] = useState("Surprise Me");
   const [notes, setNotes] = useState("");
@@ -506,6 +522,15 @@ function ClientFinder({
         previous: clients.map((c) => `${c.name} (${c.industry})`),
       });
       setLeads(d.leads);
+      // Log the run so it survives closing the browser.
+      const batch: LeadBatch = {
+        id: uid(),
+        industry,
+        notes,
+        leads: d.leads,
+        generatedAt: Date.now(),
+      };
+      updateLog((l) => ({ ...l, batches: [batch, ...l.batches].slice(0, 40) }));
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -523,6 +548,9 @@ function ClientFinder({
         business: lead,
       });
       setProspect(p);
+      // Log the full researched prospect (ideas + prompts) permanently.
+      const lp: LoggedProspect = { ...p, id: uid(), generatedAt: Date.now() };
+      updateLog((l) => ({ ...l, prospects: [lp, ...l.prospects].slice(0, 60) }));
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -652,7 +680,7 @@ function ClientFinder({
             onClick={() => setProspect(null)}
             className="text-xs font-bold uppercase tracking-widest text-kwgold/70 hover:text-kwgold"
           >
-            ← Back to the {leads?.length || 10} businesses
+            {leads ? `← Back to the ${leads.length} businesses` : "← Close"}
           </button>
         </div>
       )}
@@ -707,6 +735,150 @@ function ClientFinder({
           </div>
         </div>
       )}
+
+      <IdeaLogPanel
+        ideaLog={ideaLog}
+        updateLog={updateLog}
+        onOpenBatch={(b) => {
+          setIndustry(b.industry);
+          setNotes(b.notes);
+          setLeads(b.leads);
+          setProspect(null);
+          setErr("");
+        }}
+        onOpenProspect={(p) => {
+          setProspect(p);
+          setErr("");
+        }}
+      />
+    </div>
+  );
+}
+
+// ── Idea Log: every AI find & deep-dive, saved forever ──
+function IdeaLogPanel({
+  ideaLog,
+  updateLog,
+  onOpenBatch,
+  onOpenProspect,
+}: {
+  ideaLog: IdeaLog;
+  updateLog: React.Dispatch<React.SetStateAction<IdeaLog>>;
+  onOpenBatch: (b: LeadBatch) => void;
+  onOpenProspect: (p: LoggedProspect) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = ideaLog.batches.length + ideaLog.prospects.length;
+  if (total === 0) return null;
+  const when = (t: number) =>
+    new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    " " +
+    new Date(t).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div className="mt-5 rounded-2xl border border-kwgold/20 bg-black/30">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-xs font-bold uppercase tracking-widest text-kwgold">
+          {open ? "▾" : "▸"} 📜 Idea Log — every search &amp; business researched, saved ({total})
+        </span>
+        <span className="text-[10px] text-white/30">tap any entry to reopen it</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-kwgold/15 px-4 pb-4">
+          {ideaLog.prospects.length > 0 && (
+            <>
+              <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-kwgold/60">
+                Researched businesses ({ideaLog.prospects.length}) — full plans &amp; prompts saved
+              </div>
+              <div className="mt-2 grid gap-1.5">
+                {ideaLog.prospects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-kwgold/10 bg-kwcard px-3 py-2 transition hover:border-kwgold/50"
+                    onClick={() => onOpenProspect(p)}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold">{p.businessName}</div>
+                      <div className="text-[10px] uppercase tracking-wider text-kwgold/60">
+                        {p.industry} · {p.ideas.length} automations · {when(p.generatedAt)}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-kwgold">open →</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Remove "${p.businessName}" from the Idea Log?`))
+                            updateLog((l) => ({
+                              ...l,
+                              prospects: l.prospects.filter((x) => x.id !== p.id),
+                            }));
+                        }}
+                        className="rounded px-1.5 text-xs text-white/25 hover:bg-rose-950/50 hover:text-rose-300"
+                        title="Remove from log"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {ideaLog.batches.length > 0 && (
+            <>
+              <div className="mt-4 text-[10px] font-bold uppercase tracking-widest text-kwgold/60">
+                Business searches ({ideaLog.batches.length})
+              </div>
+              <div className="mt-2 grid gap-1.5">
+                {ideaLog.batches.map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-kwgold/10 bg-kwcard px-3 py-2 transition hover:border-kwgold/50"
+                    onClick={() => onOpenBatch(b)}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold">
+                        {b.leads.length} {b.industry === "Surprise Me" ? "" : b.industry + " "}
+                        businesses
+                      </div>
+                      <div className="truncate text-[10px] uppercase tracking-wider text-kwgold/60">
+                        {b.leads
+                          .slice(0, 3)
+                          .map((l) => l.name)
+                          .join(", ")}
+                        … · {when(b.generatedAt)}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-kwgold">open →</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Remove this search from the Idea Log?"))
+                            updateLog((l) => ({
+                              ...l,
+                              batches: l.batches.filter((x) => x.id !== b.id),
+                            }));
+                        }}
+                        className="rounded px-1.5 text-xs text-white/25 hover:bg-rose-950/50 hover:text-rose-300"
+                        title="Remove from log"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -714,11 +886,15 @@ function ClientFinder({
 // ── Home: client list + new client ────────────
 function HomeScreen({
   clients,
+  ideaLog,
+  updateLog,
   onAdd,
   onOpen,
   onDelete,
 }: {
   clients: Client[];
+  ideaLog: IdeaLog;
+  updateLog: React.Dispatch<React.SetStateAction<IdeaLog>>;
   onAdd: (c: Client) => void;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
@@ -749,7 +925,7 @@ function HomeScreen({
 
   return (
     <div>
-      <ClientFinder clients={clients} onAdd={onAdd} />
+      <ClientFinder clients={clients} onAdd={onAdd} ideaLog={ideaLog} updateLog={updateLog} />
 
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-bold">

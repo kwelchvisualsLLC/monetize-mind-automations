@@ -42,6 +42,15 @@ export type BizLead = {
   hook: string; // one-line opener Keith would use
 };
 
+// One saved run of "Find 10 businesses" (kept in the Idea Log).
+export type LeadBatch = {
+  id: string;
+  industry: string;
+  notes: string;
+  leads: BizLead[];
+  generatedAt: number;
+};
+
 // A business the AI researched and suggests Keith go sell to.
 export type Prospect = {
   businessName: string;
@@ -54,6 +63,14 @@ export type Prospect = {
   howToFind: string;
   summary: string;
   ideas: Omit<AutomationIdea, "id">[];
+};
+
+// A deep-dived prospect saved in the Idea Log.
+export type LoggedProspect = Prospect & { id: string; generatedAt: number };
+
+export type IdeaLog = {
+  batches: LeadBatch[];
+  prospects: LoggedProspect[];
 };
 
 export type Analysis = {
