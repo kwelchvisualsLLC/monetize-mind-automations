@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #0a0a0a;
+  color: #f4f1e8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+::selection {
+  background: #c9a84c;
+  color: #0a0a0a;
+}
+
+.gold-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.gold-scroll::-webkit-scrollbar-thumb {
+  background: #3a3222;
+  border-radius: 4px;
+}
+
+/* Print styles: only the business plan prints, on white */
+@media print {
+  body {
+    background: #fff;
+    color: #111;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    display: block !important;
+    color: #111;
+  }
+}
