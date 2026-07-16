@@ -19,6 +19,8 @@ RULES:
 - Be specific and concrete. "Automate marketing" is bad. "Auto-reply to every new Google review within 10 minutes in the owner's voice" is good.
 - Quantify impact in plain terms (hours saved per week, faster response, more bookings, fewer no-shows).
 - difficulty is exactly one of: "Easy", "Medium", "Advanced".
+- "pitch": ONE sentence Keith says to the owner to sell it.
+- "prompt": a complete, standalone, copy-paste-ready prompt Keith pastes into Claude to BUILD the automation deliverable. It must open with a sharp role line, contain ALL context (assume the AI knows nothing), specify a simple self-contained no-code-for-Keith stack, include client placeholder fields ([CLIENT NAME], [CLIENT PHONE], etc.), demand the full finished deliverable in one shot with verification, and end by telling the AI to make all decisions itself and deliver finished output rather than asking questions. Use \\n for line breaks.
 
 == OUTPUT — STRICT JSON ONLY, no prose before or after ==
 {
@@ -29,7 +31,9 @@ RULES:
       "painPoint": "The specific problem it solves, 1 sentence.",
       "description": "2-3 sentences: what the automation does end to end.",
       "impact": "Plain-terms benefit, e.g. 'Saves ~8 hrs/week and cuts no-shows ~30%'.",
-      "difficulty": "Easy | Medium | Advanced"
+      "difficulty": "Easy | Medium | Advanced",
+      "pitch": "1 sentence sell line",
+      "prompt": "FULL build prompt"
     }
   ]
 }`;
@@ -59,7 +63,7 @@ Core problems (in their words): ${clean(c.problems) || "(not given)"}
 Current manual processes: ${clean(c.processes) || "(not given)"}
 Goals: ${clean(c.goals) || "(not given)"}`;
 
-    const raw = await callModel(SYSTEM, user, 3000);
+    const raw = await callModel(SYSTEM, user, 8000);
     const data = extractJson(raw);
     const ideas = Array.isArray(data?.ideas) ? data.ideas : [];
     if (!data?.summary || ideas.length < 3) {
@@ -74,6 +78,8 @@ Goals: ${clean(c.goals) || "(not given)"}`;
         description: String(i?.description || ""),
         impact: String(i?.impact || ""),
         difficulty: String(i?.difficulty || "Medium"),
+        pitch: String(i?.pitch || ""),
+        prompt: String(i?.prompt || ""),
       })),
     });
   } catch (e: any) {

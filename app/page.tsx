@@ -7,6 +7,7 @@ import {
   AutomationIdea,
   Client,
   INDUSTRIES,
+  Prospect,
   STEP_TYPES,
   Step,
   StepType,
@@ -288,6 +289,29 @@ function Field({
   );
 }
 
+function PromptBlock({ prompt, title }: { prompt: string; title?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!prompt) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-kwgold/20 bg-black/50">
+      <div className="flex items-center justify-between gap-2 border-b border-kwgold/15 px-4 py-2.5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-left text-[11px] font-bold uppercase tracking-widest text-kwgold"
+        >
+          {open ? "▾" : "▸"} {title || "Copy-paste Claude build prompt"}
+        </button>
+        <CopyButton text={prompt} label="Copy prompt" />
+      </div>
+      {open && (
+        <pre className="gold-scroll max-h-72 overflow-y-auto whitespace-pre-wrap px-4 py-3 font-sans text-xs leading-relaxed text-white/70">
+          {prompt}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function DiffBadge({ d }: { d: string }) {
   const color =
     d === "Easy"
@@ -451,6 +475,158 @@ export default function Page() {
   );
 }
 
+// ── AI Client Finder ──────────────────────────
+const FINDER_INDUSTRIES = ["Surprise Me", ...INDUSTRIES.filter((i) => i !== "Other")];
+
+function ClientFinder({
+  clients,
+  onAdd,
+}: {
+  clients: Client[];
+  onAdd: (c: Client) => void;
+}) {
+  const [industry, setIndustry] = useState("Surprise Me");
+  const [notes, setNotes] = useState("");
+  const [prospect, setProspect] = useState<Prospect | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const research = async () => {
+    setErr("");
+    setBusy(true);
+    setProspect(null);
+    try {
+      const p = await post<Prospect>("/api/discover", {
+        industry,
+        notes,
+        previous: clients.map((c) => `${c.name} (${c.industry})`),
+      });
+      setProspect(p);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addProspect = () => {
+    if (!prospect) return;
+    onAdd({
+      id: uid(),
+      name: prospect.businessName,
+      industry: prospect.industry,
+      size: prospect.size,
+      problems: prospect.problems,
+      processes: prospect.processes,
+      goals: prospect.goals,
+      createdAt: Date.now(),
+      analysis: {
+        summary: prospect.summary,
+        ideas: prospect.ideas.map((i) => ({ ...i, id: uid() })),
+        generatedAt: Date.now(),
+      },
+      automations: [],
+    });
+  };
+
+  return (
+    <div className="mb-8 rounded-2xl border border-kwgold/40 bg-kwcard p-5">
+      <div className="text-sm font-bold uppercase tracking-widest text-kwgold">
+        🔎 AI Client Finder
+      </div>
+      <div className="mt-1 text-sm text-white/50">
+        The AI researches a high-value business type for you — who they are, why they need
+        automations, how to find them near you, and 3-4 automations with ready-to-run build prompts.
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {FINDER_INDUSTRIES.map((i) => (
+          <button
+            key={i}
+            onClick={() => setIndustry(i)}
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+              industry === i
+                ? "border-kwgold bg-kwgold text-kwblack"
+                : "border-kwgold/25 text-kwgold/80 hover:border-kwgold/60"
+            }`}
+          >
+            {i}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Optional direction, e.g. 'near Sacramento' or 'ones that still use paper'"
+          className="min-w-60 flex-1 rounded-xl border border-kwgold/20 bg-black/40 px-3.5 py-2.5 text-sm outline-none placeholder:text-white/25 focus:border-kwgold/70"
+        />
+        {busy ? (
+          <Spinner label="Researching prospects…" />
+        ) : (
+          <GoldButton onClick={research}>
+            {prospect ? "↻ Research another" : "🔎 Research a client business"}
+          </GoldButton>
+        )}
+      </div>
+
+      {err && <div className="mt-3 text-sm text-rose-300">⚠️ {err}</div>}
+
+      {prospect && !busy && (
+        <div className="mt-5 rounded-2xl border border-kwgold/25 bg-black/30 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-lg font-extrabold">{prospect.businessName}</div>
+              <div className="mt-0.5 text-xs uppercase tracking-widest text-kwgold/70">
+                {prospect.industry}
+                {prospect.size ? ` · ${prospect.size}` : ""}
+              </div>
+            </div>
+            <GoldButton onClick={addProspect}>➕ Add to my clients →</GoldButton>
+          </div>
+
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div className="rounded-xl bg-kwgold/10 p-3">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-kwgold">
+                Why this business
+              </div>
+              <div className="text-white/75">{prospect.whyTarget}</div>
+            </div>
+            <div className="rounded-xl bg-kwgold/10 p-3">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-kwgold">
+                How to find them
+              </div>
+              <div className="text-white/75">{prospect.howToFind}</div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-sm text-white/60">
+            <span className="font-bold text-kwgold/80">Their pains: </span>
+            {prospect.problems}
+          </div>
+
+          <div className="mt-3 text-xs font-bold uppercase tracking-widest text-kwgold/60">
+            {prospect.ideas.length} automations they need (full build prompts included)
+          </div>
+          <ul className="mt-2 space-y-1.5 text-sm text-white/75">
+            {prospect.ideas.map((i, n) => (
+              <li key={n} className="flex items-center gap-2">
+                <span className="text-kwgold">{n + 1}.</span> {i.title}
+                <DiffBadge d={i.difficulty} />
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 text-xs text-white/35">
+            Add it to your clients to see the full analysis, pitches and prompts — then build,
+            simulate and generate the proposal.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Home: client list + new client ────────────
 function HomeScreen({
   clients,
@@ -463,7 +639,7 @@ function HomeScreen({
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const [showForm, setShowForm] = useState(clients.length === 0);
+  const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState(INDUSTRIES[0]);
   const [customIndustry, setCustomIndustry] = useState("");
@@ -489,13 +665,15 @@ function HomeScreen({
 
   return (
     <div>
+      <ClientFinder clients={clients} onAdd={onAdd} />
+
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-lg font-bold">
           Client Businesses{" "}
           <span className="text-sm font-normal text-white/40">({clients.length})</span>
         </h1>
-        <GoldButton onClick={() => setShowForm((s) => !s)}>
-          {showForm ? "Close" : "+ New Client Business"}
+        <GoldButton ghost small onClick={() => setShowForm((s) => !s)}>
+          {showForm ? "Close" : "+ Add one manually"}
         </GoldButton>
       </div>
 
@@ -545,7 +723,8 @@ function HomeScreen({
 
       {clients.length === 0 && !showForm ? (
         <div className="rounded-2xl border border-dashed border-kwgold/25 py-16 text-center text-white/40">
-          No clients yet. Add your first client business to start building automations.
+          No clients yet. Hit “🔎 Research a client business” above and let the AI find your first
+          one.
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -765,7 +944,13 @@ function ClientScreen({
                       <span className="font-bold">Impact: </span>
                       {idea.impact}
                     </div>
+                    {idea.pitch && (
+                      <div className="rounded-xl border border-kwgold/20 bg-kwgold/5 px-3 py-2 italic text-kwgoldlight">
+                        “{idea.pitch}”
+                      </div>
+                    )}
                   </div>
+                  {idea.prompt && <PromptBlock prompt={idea.prompt} />}
                   <div className="mt-4">
                     {buildingIdea === idea.id ? (
                       <Spinner label="Drafting the automation blueprint…" />

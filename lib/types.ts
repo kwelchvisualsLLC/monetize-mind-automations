@@ -30,6 +30,22 @@ export type AutomationIdea = {
   description: string;
   impact: string;
   difficulty: string;
+  pitch?: string; // one-line sell Keith says to the business
+  prompt?: string; // full copy-paste Claude build prompt
+};
+
+// A business the AI researched and suggests Keith go sell to.
+export type Prospect = {
+  businessName: string;
+  industry: string;
+  size: string;
+  problems: string;
+  processes: string;
+  goals: string;
+  whyTarget: string;
+  howToFind: string;
+  summary: string;
+  ideas: Omit<AutomationIdea, "id">[];
 };
 
 export type Analysis = {
