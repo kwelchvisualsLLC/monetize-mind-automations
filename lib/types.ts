@@ -23,6 +23,15 @@ export type Automation = {
   updatedAt: number;
 };
 
+// The actual generated deliverable for an automation idea.
+export type IdeaBuild = {
+  instructions: string; // setup & go-live steps
+  checklist: string; // pre-delivery test checklist
+  files: { name: string; content: string }[];
+  savedTo?: string; // T9 folder path when filed locally
+  generatedAt: number;
+};
+
 export type AutomationIdea = {
   id: string;
   title: string;
@@ -32,6 +41,7 @@ export type AutomationIdea = {
   difficulty: string;
   pitch?: string; // one-line sell Keith says to the business
   prompt?: string; // full copy-paste Claude build prompt
+  build?: IdeaBuild; // the generated product itself
 };
 
 // One real business the AI found in a niche (stage 1 of the finder).

@@ -316,6 +316,158 @@ function PromptBlock({ prompt, title }: { prompt: string; title?: string }) {
   );
 }
 
+// ── Build panel: the actual product for an idea ──
+function downloadFile(name: string, content: string) {
+  const blob = new Blob([content], {
+    type: name.endsWith(".html") ? "text/html" : "text/plain",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function BuildPanel({
+  client,
+  idea,
+  onBuild,
+  setError,
+}: {
+  client: Client;
+  idea: AutomationIdea;
+  onBuild: (build: NonNullable<AutomationIdea["build"]>) => void;
+  setError: (e: string) => void;
+}) {
+  const [building, setBuilding] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const build = idea.build;
+
+  const generate = async () => {
+    setError("");
+    setBuilding(true);
+    try {
+      const d = await post<any>("/api/build", { client, idea });
+      onBuild({
+        instructions: d.instructions,
+        checklist: d.checklist,
+        files: d.files,
+        savedTo: d.savedTo,
+        generatedAt: Date.now(),
+      });
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  if (!build) {
+    return (
+      <div className="mt-3">
+        {building ? (
+          <div className="rounded-xl border border-kwgold/25 bg-black/40 px-4 py-3">
+            <Spinner label="Building the product, then a second AI pass hunts & fixes flaws… (~1-2 min)" />
+          </div>
+        ) : (
+          <GoldButton small ghost onClick={generate}>
+            ⚙️ Generate the full build — the actual product, ready if they say yes
+          </GoldButton>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-400/30 bg-black/50">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-400/20 px-4 py-2.5">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-300">
+          📦 Build ready — generated &amp; AI-reviewed{" "}
+          {new Date(build.generatedAt).toLocaleDateString()}
+        </span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowNotes((s) => !s)}
+            className="rounded-lg border border-kwgold/40 px-3 py-1.5 text-xs font-semibold text-kwgold hover:bg-kwgold/10"
+          >
+            {showNotes ? "Hide" : "Setup & checklist"}
+          </button>
+          {building ? (
+            <Spinner label="Rebuilding…" />
+          ) : (
+            <button
+              onClick={generate}
+              className="rounded-lg border border-kwgold/40 px-3 py-1.5 text-xs font-semibold text-kwgold hover:bg-kwgold/10"
+            >
+              ↻ Rebuild
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="px-4 py-3">
+        {build.files.map((f) => (
+          <div key={f.name} className="flex flex-wrap items-center gap-2 py-1">
+            <span className="min-w-32 text-sm font-bold text-white/85">{f.name}</span>
+            <span className="text-[10px] text-white/30">
+              {(f.content.length / 1024).toFixed(0)} KB
+            </span>
+            <div className="ml-auto flex gap-2">
+              {f.name.endsWith(".html") && (
+                <button
+                  onClick={() => {
+                    const url = URL.createObjectURL(
+                      new Blob([f.content], { type: "text/html" })
+                    );
+                    window.open(url, "_blank");
+                  }}
+                  className="rounded-lg bg-kwgold px-3 py-1.5 text-xs font-bold text-kwblack hover:bg-kwgoldlight"
+                >
+                  ▶ Demo it
+                </button>
+              )}
+              <button
+                onClick={() => downloadFile(f.name, f.content)}
+                className="rounded-lg border border-kwgold/40 px-3 py-1.5 text-xs font-semibold text-kwgold hover:bg-kwgold/10"
+              >
+                ⬇ Download
+              </button>
+              <CopyButton text={f.content} label="Copy code" />
+            </div>
+          </div>
+        ))}
+
+        {build.savedTo && (
+          <div className="mt-2 rounded-lg border border-emerald-400/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
+            💾 Filed on T9 → {build.savedTo}
+          </div>
+        )}
+
+        {showNotes && (
+          <div className="mt-3 grid gap-3">
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-kwgold/70">
+                Setup &amp; go-live
+              </div>
+              <pre className="gold-scroll max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-black/40 px-3 py-2 font-sans text-xs leading-relaxed text-white/70">
+                {build.instructions}
+              </pre>
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-kwgold/70">
+                Test before delivering
+              </div>
+              <pre className="gold-scroll max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-black/40 px-3 py-2 font-sans text-xs leading-relaxed text-white/70">
+                {build.checklist}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DiffBadge({ d }: { d: string }) {
   const color =
     d === "Easy"
@@ -1210,6 +1362,22 @@ function ClientScreen({
                     )}
                   </div>
                   {idea.prompt && <PromptBlock prompt={idea.prompt} />}
+                  <BuildPanel
+                    client={client}
+                    idea={idea}
+                    setError={setError}
+                    onBuild={(build) =>
+                      update((c) => ({
+                        ...c,
+                        analysis: c.analysis && {
+                          ...c.analysis,
+                          ideas: c.analysis.ideas.map((i) =>
+                            i.id === idea.id ? { ...i, build } : i
+                          ),
+                        },
+                      }))
+                    }
+                  />
                   <div className="mt-4">
                     {buildingIdea === idea.id ? (
                       <Spinner label="Drafting the automation blueprint…" />
