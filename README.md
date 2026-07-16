@@ -4,6 +4,10 @@ The **Automations** section of MonetizeMind: define a client business, let AI fi
 highest-impact automation opportunities, design the automation visually, simulate it
 live for the client, and generate a client-ready business plan / proposal.
 
+**LIVE at https://monetize-mind-automations.onrender.com** (Render free tier — first
+load after idle takes ~50s to wake). Local runs additionally file every generated
+proposal on the T9 drive under `/Volumes/T9/claudefiles/Automation Proposals/<Client>/`.
+
 ## Run it
 
 Double-click **Start-App.command** (installs on first run, then opens
