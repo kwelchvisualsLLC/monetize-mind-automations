@@ -34,6 +34,14 @@ export type AutomationIdea = {
   prompt?: string; // full copy-paste Claude build prompt
 };
 
+// One real business the AI found in a niche (stage 1 of the finder).
+export type BizLead = {
+  name: string;
+  descriptor: string; // what/where it is
+  signals: string; // why they clearly need automation
+  hook: string; // one-line opener Keith would use
+};
+
 // A business the AI researched and suggests Keith go sell to.
 export type Prospect = {
   businessName: string;

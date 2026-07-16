@@ -5,6 +5,7 @@ import {
   Analysis,
   Automation,
   AutomationIdea,
+  BizLead,
   Client,
   INDUSTRIES,
   Prospect,
@@ -487,21 +488,24 @@ function ClientFinder({
 }) {
   const [industry, setIndustry] = useState("Surprise Me");
   const [notes, setNotes] = useState("");
+  const [leads, setLeads] = useState<BizLead[] | null>(null);
   const [prospect, setProspect] = useState<Prospect | null>(null);
   const [busy, setBusy] = useState(false);
+  const [digging, setDigging] = useState(""); // lead name being researched
   const [err, setErr] = useState("");
 
   const research = async () => {
     setErr("");
     setBusy(true);
     setProspect(null);
+    setLeads(null);
     try {
-      const p = await post<Prospect>("/api/discover", {
+      const d = await post<{ leads: BizLead[] }>("/api/prospects", {
         industry,
         notes,
         previous: clients.map((c) => `${c.name} (${c.industry})`),
       });
-      setProspect(p);
+      setLeads(d.leads);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -509,20 +513,39 @@ function ClientFinder({
     }
   };
 
+  const deepDive = async (lead: BizLead) => {
+    setErr("");
+    setDigging(lead.name);
+    try {
+      const p = await post<Prospect>("/api/discover", {
+        industry,
+        notes,
+        business: lead,
+      });
+      setProspect(p);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setDigging("");
+    }
+  };
+
   const addProspect = () => {
     if (!prospect) return;
+    const p = prospect;
+    setProspect(null); // back to the lead list next time home is shown
     onAdd({
       id: uid(),
-      name: prospect.businessName,
-      industry: prospect.industry,
-      size: prospect.size,
-      problems: prospect.problems,
-      processes: prospect.processes,
-      goals: prospect.goals,
+      name: p.businessName,
+      industry: p.industry,
+      size: p.size,
+      problems: p.problems,
+      processes: p.processes,
+      goals: p.goals,
       createdAt: Date.now(),
       analysis: {
-        summary: prospect.summary,
-        ideas: prospect.ideas.map((i) => ({ ...i, id: uid() })),
+        summary: p.summary,
+        ideas: p.ideas.map((i) => ({ ...i, id: uid() })),
         generatedAt: Date.now(),
       },
       automations: [],
@@ -535,8 +558,8 @@ function ClientFinder({
         🔎 AI Client Finder
       </div>
       <div className="mt-1 text-sm text-white/50">
-        The AI researches a high-value business type for you — who they are, why they need
-        automations, how to find them near you, and 3-4 automations with ready-to-run build prompts.
+        Pick a field and the AI finds 10 real businesses in it. Tap one and it researches that
+        exact business — what it needs, the pitch, and build prompts written specifically for it.
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -563,15 +586,76 @@ function ClientFinder({
           className="min-w-60 flex-1 rounded-xl border border-kwgold/20 bg-black/40 px-3.5 py-2.5 text-sm outline-none placeholder:text-white/25 focus:border-kwgold/70"
         />
         {busy ? (
-          <Spinner label="Researching prospects…" />
+          <Spinner label="Finding 10 real businesses…" />
         ) : (
           <GoldButton onClick={research}>
-            {prospect ? "↻ Research another" : "🔎 Research a client business"}
+            {leads || prospect ? "↻ Find 10 more" : "🔎 Find 10 businesses"}
           </GoldButton>
         )}
       </div>
 
       {err && <div className="mt-3 text-sm text-rose-300">⚠️ {err}</div>}
+
+      {/* Stage 1: the 10 leads */}
+      {leads && !prospect && !busy && (
+        <div className="mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-bold uppercase tracking-widest text-kwgold/70">
+              {leads.length} businesses found — tap one for its targeted automation plan
+            </div>
+            <div className="text-[10px] text-white/30">
+              AI-suggested — confirm the business/location before pitching
+            </div>
+          </div>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {leads.map((l, n) => (
+              <button
+                key={l.name + n}
+                onClick={() => deepDive(l)}
+                disabled={!!digging}
+                className={`rounded-2xl border p-4 text-left transition disabled:opacity-40 ${
+                  digging === l.name
+                    ? "border-kwgold bg-kwgold/10"
+                    : "border-kwgold/15 bg-black/30 hover:border-kwgold/60"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-bold">
+                    <span className="mr-2 text-kwgold">{n + 1}.</span>
+                    {l.name}
+                  </div>
+                  {digging === l.name ? (
+                    <Spinner label="" />
+                  ) : (
+                    <span className="text-kwgold">→</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs uppercase tracking-wider text-kwgold/60">
+                  {l.descriptor}
+                </div>
+                <div className="mt-2 text-xs text-white/55">{l.signals}</div>
+              </button>
+            ))}
+          </div>
+          {digging && (
+            <div className="mt-3 text-center text-sm text-kwgold">
+              Researching {digging} — what they need, the pitch &amp; business-specific build
+              prompts…
+            </div>
+          )}
+        </div>
+      )}
+
+      {prospect && !busy && (
+        <div className="mt-4">
+          <button
+            onClick={() => setProspect(null)}
+            className="text-xs font-bold uppercase tracking-widest text-kwgold/70 hover:text-kwgold"
+          >
+            ← Back to the {leads?.length || 10} businesses
+          </button>
+        </div>
+      )}
 
       {prospect && !busy && (
         <div className="mt-5 rounded-2xl border border-kwgold/25 bg-black/30 p-5">
@@ -595,7 +679,7 @@ function ClientFinder({
             </div>
             <div className="rounded-xl bg-kwgold/10 p-3">
               <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-kwgold">
-                How to find them
+                How to get in
               </div>
               <div className="text-white/75">{prospect.howToFind}</div>
             </div>
@@ -723,8 +807,7 @@ function HomeScreen({
 
       {clients.length === 0 && !showForm ? (
         <div className="rounded-2xl border border-dashed border-kwgold/25 py-16 text-center text-white/40">
-          No clients yet. Hit “🔎 Research a client business” above and let the AI find your first
-          one.
+          No clients yet. Hit “🔎 Find 10 businesses” above and let the AI find your first one.
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
